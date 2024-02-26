@@ -13,6 +13,10 @@
 #define BTBWIDTH 4
 #define FAILED -1
 #define SUCCESS 0
+#define DSTWIDTH 30
+#define FSMWIDTH 2
+#define MAXHISTORY 8
+#define MAXFSMSIZE 256
 
 using namespace std;
 void print_all();
@@ -45,12 +49,12 @@ class branchPredictor {
 	//rows = TBD
 	//col[1] = tag , col[2] = target jump , col[3] = local history
 	//if (isGlobalHistoty == true) then BTBtable[i][3] is equal for all i
-	unsigned ** BTBtable;
+	unsigned BTBtable[MAXTABLESIZE][BTBWIDTH];
 	//FSMtable[col_in_btb][row_in_specific table]
 	//rows = TBD , number of tables
 	//col[i] , the relevant state machine acoording to history
 	//in case of (globalTable == true) rows = 1 only 1 table.
-	unsigned **FSMtable; 
+	unsigned FSMtable[MAXTABLESIZE][MAXFSMSIZE]; 
 	SIM_stats stats;
 
 	branchPredictor(); // default constructor
@@ -63,13 +67,12 @@ class branchPredictor {
 					bool isGlobalTable,
 					int shared); // constructor
 	branchPredictor(const branchPredictor& a);
-	~branchPredictor(); // destructor
+
 };
 
 //---------------------------------------------------------------------------------------
 branchPredictor::branchPredictor()
 {
-	cout << "was created" << endl;
 	this->BTB_size = 0;
 	this->BTB_width = 0;
 	this->history_width = 0;
@@ -78,8 +81,6 @@ branchPredictor::branchPredictor()
 	this->isGlobalHistoty = false;
 	this->isGlobalTable  = false;
 	this->shared = 0;
-	this->BTBtable = NULL;
-	this->FSMtable = NULL;
 	this->stats.br_num =0;
 	this->stats.flush_num =0;
 	this->stats.size =0;
@@ -104,63 +105,37 @@ branchPredictor::branchPredictor(unsigned BTB_size,
 	this->isGlobalTable = isGlobalTable;
 	this->shared = shared;
 	//BTB
-	int rows_BTB = BTB_size;  
-	int column_BTB = BTBWIDTH; 
-	this->BTBtable = new unsigned*[rows_BTB];
-	for (int i = 0 ; i < rows_BTB ; i++) {
-		BTBtable[i] = new unsigned[column_BTB];	
-	}
-	for(int i = 0; i < rows_BTB; i++)
-	{	
+	for (int i = 0 ; i < MAXTABLESIZE ; i++) {
 		BTBtable[i][TAG] = 0;
 		BTBtable[i][DST] = 0;
 		BTBtable[i][HISTORY] = 0;
-		BTBtable[i][VALID] = 0;
-	}
-	//FSM
-	int tables_FSM = (isGlobalTable) ? 1 : BTB_size; //if global table there is only 1 table, else each BTB_row gots its own table
-	int rows_in_each_table = pow(2,history_width); //each key (history with or without fuction) got its own FSM
-	this->FSMtable = new unsigned*[tables_FSM];
-	for (int i = 0 ; i < tables_FSM ; i++) {
-		FSMtable[i] = new unsigned[rows_in_each_table];	
-	}
-
-	for(int i = 0; i < rows_BTB; i++) // init the fsm for each row
-	{	
-		for (int j = 0 ; j < rows_in_each_table ; j++) {
-			this->FSMtable[i][j] = fsm_default_state;
-		}
-	}
-	this->stats.br_num =0;
-	this->stats.flush_num =0;
-	this->stats.size = 0;  /* please update */
-}
-
-branchPredictor::~branchPredictor()
-{
-	cout << "was destroyed" <<endl;
-	if (this->BTBtable != nullptr) {
-		for (int i = 0; i < this->BTB_size ; i++)
-		{
-			
-			if ((this->BTBtable[i]) != nullptr) {
-				delete(this->BTBtable[i]);
-			}
-		}
-		delete(this->BTBtable);
+		BTBtable[i][VALID] = 0;	
 	}
 	
-	unsigned tables_FSM = (this->isGlobalTable) ? 1 : BTB_size;
-	if (this->FSMtable != NULL) {
-		
-		for (int i = 0; i < tables_FSM ; i++)
-		{
-			if (this->FSMtable[i] != NULL) {
-				delete(this->FSMtable[i]);
-			}
-		}	
-		delete(this->FSMtable);
+	//FSM
+	for (int i = 0 ; i < MAXTABLESIZE ; i++) {
+		for (int j = 0 ; j < MAXFSMSIZE ; j++) {
+			this->FSMtable[i][j] = fsm_default_state;
+		}		
 	}
+
+	this->stats.br_num =0;
+	this->stats.flush_num =0;
+	unsigned tag_bits = tag_width * BTB_size;
+	unsigned dest_bits = DSTWIDTH * BTB_size;
+	unsigned hist_bits = (isGlobalHistoty) ? history_width : history_width * BTB_size;
+	unsigned valid_bits = BTB_size;
+	unsigned fsm_num = (isGlobalTable) ? 1 : BTB_size;
+	unsigned fsm_bits = fsm_num * (FSMWIDTH * pow(2, history_width));
+
+	/*
+	cout << "tag bits = " << tag_bits << ", tag width = " << tag_width << endl;
+	cout << "dest_bits = "<<dest_bits << "dest width "<< DSTWIDTH << endl;
+	cout<< "hist_bits = "<<hist_bits << ", history width = " <<history_width<< endl; 
+	cout<< "valid = "<< valid_bits << ", valdid_width = 1 " << endl; 
+	cout<< "fsm_bits = "<< fsm_bits << ", fsm num = " << fsm_num << endl; 
+	*/ 
+	this->stats.size = tag_bits + dest_bits + hist_bits + valid_bits + fsm_bits;
 }
 
 branchPredictor::branchPredictor(const branchPredictor& a)
@@ -176,14 +151,7 @@ branchPredictor::branchPredictor(const branchPredictor& a)
 	this->shared = a.shared;
 	
 	//BTB
-		int rows_BTB = BTB_size;  
-		int column_BTB = BTBWIDTH; 
-		this->BTBtable = new unsigned*[rows_BTB];
-		for (int i = 0 ; i < rows_BTB ; i++) {
-			BTBtable[i] = new unsigned[column_BTB];	
-		}
-		for(int i = 0; i < rows_BTB; i++)
-		{	
+		for (int i = 0 ; i < MAXTABLESIZE ; i++) {
 			BTBtable[i][TAG] = a.BTBtable[i][TAG];
 			BTBtable[i][DST] = a.BTBtable[i][DST];
 			BTBtable[i][HISTORY] = a.BTBtable[i][HISTORY];
@@ -191,16 +159,8 @@ branchPredictor::branchPredictor(const branchPredictor& a)
 		}
 		
 	//FSM
-		int tables_FSM = (isGlobalTable) ? 1 : BTB_size; //if global table there is only 1 table, else each BTB_row gots its own table
-		int rows_in_each_table = pow(2,history_width); //each key (history with or without fuction) got its own FSM
-		this->FSMtable = new unsigned*[tables_FSM];
-		for (int i = 0 ; i < tables_FSM ; i++) {
-			FSMtable[i] = new unsigned[rows_in_each_table];	
-		}
-
-		for(int i = 0; i < rows_BTB; i++) // init the fsm for each row
-		{	
-			for (int j = 0 ; j < rows_in_each_table ; j++) {
+		for (int i = 0 ; i < MAXTABLESIZE ; i++) {
+			for (int j = 0 ; j < MAXFSMSIZE ; j++) {
 				this->FSMtable[i][j] = a.FSMtable[i][j];
 			}
 		}
@@ -211,6 +171,7 @@ branchPredictor::branchPredictor(const branchPredictor& a)
 }
 
 branchPredictor bp;
+
 /*****************************************************
 desc: return the tag value for a pc
 ******************************************************/
@@ -369,28 +330,36 @@ bool isGlobalHist, bool isGlobalTable, int Shared)
 			return FAILED;
 		}
 	/*
-	cout << "btbSize = " << btbSize <<endl;
-	cout << "BTB_width = " << BTB_width <<endl;
-	cout << "historySize = " << historySize<<endl;
-	cout << "tagSize =" << tagSize <<endl;
-	cout << "fsmState = " <<fsmState <<endl;
-	cout << "isGlobalHist = " << isGlobalHist <<endl;
-	cout << "isGlobalTable = " << isGlobalTable<<endl;
-	cout << "Shared = " << Shared <<endl;
+		cout << "btbSize = " << btbSize <<endl;
+		cout << "BTB_width = " << BTB_width <<endl;
+		cout << "historySize = " << historySize<<endl;
+		cout << "tagSize =" << tagSize <<endl;
+		cout << "fsmState = " <<fsmState <<endl;
+		cout << "isGlobalHist = " << isGlobalHist <<endl;
+		cout << "isGlobalTable = " << isGlobalTable<<endl;
+		cout << "Shared = " << Shared <<endl;
 	*/
 	
-
 	//creates branchPredictor
-	branchPredictor* a = new branchPredictor(btbSize,
-											BTB_width,
-											historySize, 
-											tagSize,
-											fsmState,
-											isGlobalHist,
-											isGlobalTable,
-											Shared);
+	/*branchPredictor* a = new branchPredictor(btbSize,
+							BTB_width,
+							historySize, 
+							tagSize,
+							fsmState,
+							isGlobalHist,
+							isGlobalTable,
+							Shared);
+	cout << "yolo" << endl;
 	bp = *a;
-	
+	*/
+	bp = branchPredictor(btbSize,
+							BTB_width,
+							historySize, 
+							tagSize,
+							fsmState,
+							isGlobalHist,
+							isGlobalTable,
+							Shared);
 	return SUCCESS;
 }
 
@@ -408,7 +377,7 @@ bool BP_predict(uint32_t pc, uint32_t *dst)
 		
 	//get BTB_row
 		unsigned BTB_row = get_BTB_row(pc);
-		bool isNew = bp.BTBtable[BTB_row][VALID] && (get_tag(pc) != bp.BTBtable[BTB_row][TAG]);
+		bool isNew = (!bp.BTBtable[BTB_row][VALID]) || (get_tag(pc) != bp.BTBtable[BTB_row][TAG]);
 		if (isNew) { //unknown branch, tag is not in BTB
 			*dst = pc + 4;
 			return (bp.fsm_default_state >= WT) ? T : NT ;
@@ -433,7 +402,6 @@ bool BP_predict(uint32_t pc, uint32_t *dst)
 
 void BP_update(uint32_t pc, uint32_t targetPc, bool taken, uint32_t pred_dst)
 {
-	cout << " *** ENTERED BP_UPDATE ***" << endl;
 	//protections 
 		if(bp.BTBtable == NULL || bp.FSMtable == NULL) {
 			cout << "bp wasnt init, shouldnt happen" << endl;
@@ -451,7 +419,7 @@ void BP_update(uint32_t pc, uint32_t targetPc, bool taken, uint32_t pred_dst)
 
 	//update table
 		unsigned BTB_row = get_BTB_row(pc);
-		bool isNew = bp.BTBtable[BTB_row][VALID] && (get_tag(pc) != bp.BTBtable[BTB_row][TAG]);
+		bool isNew = (!bp.BTBtable[BTB_row][VALID]) || (get_tag(pc) != bp.BTBtable[BTB_row][TAG]);
 		if (isNew) {
 			add_BTB(pc, targetPc);
 			if(!bp.isGlobalTable) { //reset table
@@ -462,7 +430,6 @@ void BP_update(uint32_t pc, uint32_t targetPc, bool taken, uint32_t pred_dst)
 		}
 		update_FSM(pc, taken); 
 		update_BTB(pc, taken);
-		print_all();
 }
 
 
@@ -477,20 +444,21 @@ void BP_GetStats(SIM_stats *curStats)
 }
 
 void print_all() {
-	cout << "is global table " << bp.isGlobalTable << endl;
-	for (int i = 0 ; i < bp.BTB_size ; i++){
-		if(bp.BTBtable != nullptr){
-		cout << "tag: " << bp.BTBtable[TAG]  << " DST: " << bp.BTBtable[DST];
-		cout << " history: " << bp.BTBtable[HISTORY]  << " valid: " << bp.BTBtable[VALID] <<endl;
-		}
-	}
+	cout << "is global table = " << bp.isGlobalTable << endl;
+	cout << "bp,BTB_size value is: " << bp.BTB_size << endl;
+	uint32_t size = bp.BTB_size;
 	int table_FSM = (bp.isGlobalTable) ? 1 : bp.BTB_size;
 	int table_rows = pow(2 , bp.history_width);
-	for (int i = 0 ; i < table_FSM ; i++){
-		for (int j = 0 ; i < table_rows ; i++){
-			if(bp.FSMtable != nullptr)
+	for (uint32_t i = 0 ; i < size ; i++){
+		if( bp.BTBtable[i] != NULL){
+			cout << "tag: " << bp.BTBtable[i][TAG]  << " DST: " << bp.BTBtable[i][DST];
+			cout << " history: " << bp.BTBtable[i][HISTORY]  << " valid: " << bp.BTBtable[i][VALID] <<endl;
+		}
+		for (int j = 0 ; j < table_rows ; j++){
+			if(bp.FSMtable[i] != NULL)
 				cout << bp.FSMtable[i][j] << "  ";
 		}	
 		cout << endl;
-	}	
+	}
+	
 }
