@@ -1,13 +1,12 @@
 /* 046267 Computer Architecture - HW #1                                 */
 /* This file should hold your implementation of the predictor simulator */
 
-//////stats size do not workkkk please repairrrrrrr!!!!!!!!!!!!!!!!!!!!!!/////////////////////////////
+
 #include <iostream>
 #include <math.h>
 #include "bp_api.h"
 
 #define MAXTABLESIZE 32
-#define MAXBITS 5
 #define T true
 #define NT false
 #define BTBWIDTH 4
@@ -16,7 +15,7 @@
 #define DSTWIDTH 30
 #define FSMWIDTH 2
 #define MAXHISTORY 8
-#define MAXFSMSIZE 256
+#define MAXFSMSIZE 256 //2^8
 
 using namespace std;
 void print_all();
@@ -38,10 +37,10 @@ enum FSM_state {
 class branchPredictor {
 	public:
 	unsigned BTB_size; //the rows of the btb table
-	unsigned BTB_width;
+	unsigned BTB_width; 
 	unsigned history_width; //number of history bits
 	unsigned tag_width; //num of tag bits
-	unsigned fsm_default_state; //when generating new machin this is the starting state
+	unsigned fsm_default_state; 
 	bool isGlobalHistoty; //if true only BTBtable[0][HISTORY] is relevant
 	bool isGlobalTable; //if true only FSMtable[0][FSM_Row] is relevant
 	int shared;
@@ -95,7 +94,6 @@ branchPredictor::branchPredictor(unsigned BTB_size,
 								bool isGlobalTable,
 								int shared)
 {
-	cout << "was created" << endl;
 	this->BTB_size = BTB_size;
 	this->BTB_width = BTB_width;
 	this->history_width = history_width;
@@ -123,24 +121,18 @@ branchPredictor::branchPredictor(unsigned BTB_size,
 	this->stats.flush_num =0;
 	unsigned tag_bits = tag_width * BTB_size;
 	unsigned dest_bits = DSTWIDTH * BTB_size;
-	unsigned hist_bits = (isGlobalHistoty) ? history_width : history_width * BTB_size;
+	unsigned hist_bits = (isGlobalHistoty) ? 
+						history_width : history_width * BTB_size;
 	unsigned valid_bits = BTB_size;
 	unsigned fsm_num = (isGlobalTable) ? 1 : BTB_size;
 	unsigned fsm_bits = fsm_num * (FSMWIDTH * pow(2, history_width));
 
-	/*
-	cout << "tag bits = " << tag_bits << ", tag width = " << tag_width << endl;
-	cout << "dest_bits = "<<dest_bits << "dest width "<< DSTWIDTH << endl;
-	cout<< "hist_bits = "<<hist_bits << ", history width = " <<history_width<< endl; 
-	cout<< "valid = "<< valid_bits << ", valdid_width = 1 " << endl; 
-	cout<< "fsm_bits = "<< fsm_bits << ", fsm num = " << fsm_num << endl; 
-	*/ 
-	this->stats.size = tag_bits + dest_bits + hist_bits + valid_bits + fsm_bits;
+	this->stats.size = tag_bits + dest_bits + 
+					   hist_bits + valid_bits + fsm_bits;
 }
 
 branchPredictor::branchPredictor(const branchPredictor& a)
 {
-	cout << "bp was copied"<<endl;
 	this->BTB_size = a.BTB_size;
 	this->BTB_width = a.BTB_width;
 	this->history_width = a.history_width;
@@ -261,21 +253,28 @@ void add_BTB(uint32_t pc, uint32_t targetPc)
 	}
 }
 
-void update_BTB(uint32_t pc, bool isTaken)
+void update_BTB(uint32_t pc, bool isTaken, uint32_t targetPc )
 {
-	uint32_t row = (bp.isGlobalHistoty) ? 0 : get_BTB_row(pc);
-	unsigned curr_history = bp.BTBtable[row][HISTORY] << 1;
+	uint32_t BTB_row = get_BTB_row(pc);
+	uint32_t table_index = (bp.isGlobalHistoty) ? 0 : BTB_row;
+	unsigned curr_history = bp.BTBtable[table_index][HISTORY] << 1;
 	curr_history = (isTaken) ? curr_history + 1 : curr_history; 
 	uint32_t mask = pow(2,(bp.history_width)) - 1;
 	curr_history = curr_history & mask;
-	bp.BTBtable[row][HISTORY] = curr_history;
+	bp.BTBtable[table_index][HISTORY] = curr_history;
+	bp.BTBtable[BTB_row][DST] = targetPc;
 }
 
 
-//-------------- The functions needed for implement ------------------------//
+//-------------- The functions needed for implement ----------------------//
 
-int BP_init(unsigned btbSize, unsigned historySize, unsigned tagSize, unsigned fsmState,
-bool isGlobalHist, bool isGlobalTable, int Shared)
+int BP_init(unsigned btbSize,
+			unsigned historySize,
+			unsigned tagSize,
+			unsigned fsmState,
+			bool isGlobalHist, 
+			bool isGlobalTable, 
+			int Shared)
 {
 	//--------validate arguments 
 		//btbSize
@@ -329,29 +328,8 @@ bool isGlobalHist, bool isGlobalTable, int Shared)
 			//shared value not valid
 			return FAILED;
 		}
-	/*
-		cout << "btbSize = " << btbSize <<endl;
-		cout << "BTB_width = " << BTB_width <<endl;
-		cout << "historySize = " << historySize<<endl;
-		cout << "tagSize =" << tagSize <<endl;
-		cout << "fsmState = " <<fsmState <<endl;
-		cout << "isGlobalHist = " << isGlobalHist <<endl;
-		cout << "isGlobalTable = " << isGlobalTable<<endl;
-		cout << "Shared = " << Shared <<endl;
-	*/
 	
-	//creates branchPredictor
-	/*branchPredictor* a = new branchPredictor(btbSize,
-							BTB_width,
-							historySize, 
-							tagSize,
-							fsmState,
-							isGlobalHist,
-							isGlobalTable,
-							Shared);
-	cout << "yolo" << endl;
-	bp = *a;
-	*/
+
 	bp = branchPredictor(btbSize,
 							BTB_width,
 							historySize, 
@@ -377,10 +355,11 @@ bool BP_predict(uint32_t pc, uint32_t *dst)
 		
 	//get BTB_row
 		unsigned BTB_row = get_BTB_row(pc);
-		bool isNew = (!bp.BTBtable[BTB_row][VALID]) || (get_tag(pc) != bp.BTBtable[BTB_row][TAG]);
+		bool isNew = (!bp.BTBtable[BTB_row][VALID]) || 
+					(get_tag(pc) != bp.BTBtable[BTB_row][TAG]);
 		if (isNew) { //unknown branch, tag is not in BTB
 			*dst = pc + 4;
-			return (bp.fsm_default_state >= WT) ? T : NT ;
+			return NT ;
 		}
 
 	//get FSM_table_index
@@ -415,11 +394,11 @@ void BP_update(uint32_t pc, uint32_t targetPc, bool taken, uint32_t pred_dst)
 			(!taken && (pc + 4 != pred_dst))) {
 			bp.stats.flush_num++;
 		}
-		cout << "branches are: " << bp.stats.br_num << " and flushes are: " << bp.stats.flush_num<< endl;
 
 	//update table
 		unsigned BTB_row = get_BTB_row(pc);
-		bool isNew = (!bp.BTBtable[BTB_row][VALID]) || (get_tag(pc) != bp.BTBtable[BTB_row][TAG]);
+		bool isNew = (!bp.BTBtable[BTB_row][VALID]) ||
+					 (get_tag(pc) != bp.BTBtable[BTB_row][TAG]);
 		if (isNew) {
 			add_BTB(pc, targetPc);
 			if(!bp.isGlobalTable) { //reset table
@@ -429,10 +408,10 @@ void BP_update(uint32_t pc, uint32_t targetPc, bool taken, uint32_t pred_dst)
 			}
 		}
 		update_FSM(pc, taken); 
-		update_BTB(pc, taken);
+		update_BTB(pc, taken, targetPc);
+		
 }
-
-
+	
 void BP_GetStats(SIM_stats *curStats) 
 {
 	if (curStats == NULL) {
@@ -443,16 +422,17 @@ void BP_GetStats(SIM_stats *curStats)
 	(*curStats).size= bp.stats.size;
 }
 
-void print_all() {
+void print_all() { //function for debug
 	cout << "is global table = " << bp.isGlobalTable << endl;
 	cout << "bp,BTB_size value is: " << bp.BTB_size << endl;
 	uint32_t size = bp.BTB_size;
-	int table_FSM = (bp.isGlobalTable) ? 1 : bp.BTB_size;
 	int table_rows = pow(2 , bp.history_width);
 	for (uint32_t i = 0 ; i < size ; i++){
 		if( bp.BTBtable[i] != NULL){
-			cout << "tag: " << bp.BTBtable[i][TAG]  << " DST: " << bp.BTBtable[i][DST];
-			cout << " history: " << bp.BTBtable[i][HISTORY]  << " valid: " << bp.BTBtable[i][VALID] <<endl;
+			cout << "tag: " << bp.BTBtable[i][TAG]  << " DST: " <<
+			bp.BTBtable[i][DST];
+			cout << " history: " << bp.BTBtable[i][HISTORY]  << " valid: " <<
+			bp.BTBtable[i][VALID] <<endl;
 		}
 		for (int j = 0 ; j < table_rows ; j++){
 			if(bp.FSMtable[i] != NULL)
