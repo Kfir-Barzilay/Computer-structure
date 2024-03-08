@@ -1,8 +1,20 @@
+# Makefile for the smash program
+CC = g++
+CFLAGS = -g -Wall -std=c++11
+CCLINK = $(CC)
+OBJS = cache.o cacheSim.o
+RM = rm -f
+# Creating the  executable
+cacheSim: $(OBJS)
+	$(CCLINK) -o cacheSim $(CFLAGS) $(OBJS)
+# Creating the object files
+cache.o :cache.cpp cache.hpp
+	$(CC) -c $(CFLAGS) cache.cpp -o cache.o
+cacheSim.o: cacheSim.cpp 
+	$(CC) -c $(CFLAGS) cacheSim.cpp -o cacheSim.o
 
-cacheSim: cacheSim.cpp
-	g++ -o cacheSim cacheSim.cpp
-
-.PHONY: clean
+# Cleaning old files before new make
 clean:
-	rm -f *.o
-	rm -f cacheSim
+	$(RM) $(TARGET) *.o *~ "#"* core.* cacheSim
+
+
