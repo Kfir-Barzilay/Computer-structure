@@ -1,0 +1,46 @@
+> Checking submission file hw1_207033234_314654302.tar.gz
+>> Extracted student IDs 207033234 and 314654302
+> Decompressing tar.gz files to submission-207033234_314654302
+> Compiling
+> Running tests
+>> Test: example1
+>>> Success!
+>> Test: example2
+>>> Success!
+>> Test: example3
+>>> Success!
+>> Test: example4
+>>> Success!
+>> Test: example5
+>>> Success!
+>> Test: example6
+>>> Success!
+>> Test: example7
+>>> Success!
+>> Test: example8
+>>> Success!
+>> Test: example9
+>>> Success!
+>> Test: example10
+>>> Success!
+>> Test: example11
+>>> Success!
+>> Test: example12
+>>> Success!
+>> Test: example13
+>>> Success!
+>> Test: example14
+>>> Success!
+>> Test: example15
+>>> Success!
+>> Test: example16
+>>> Success!
+>> Test: example17
+>>> Success!
+>> Test: example18
+>>> Success!
+>> Test: example19
+>>> Success!
+>> Test: example20
+>>> Success!
+>>>> Grade: 100
